@@ -95,6 +95,8 @@ data class DownloadLink(
     val isDubbed: Boolean,     // Persian dub (KIMO.DUBLE) vs original audio
     val season: Int?,          // from SxxEyy in the filename; null for films
     val episode: Int?,
+    /** The site's online stream of the same release — where its subtitles live. */
+    val stream: StreamRef? = null,
 ) {
     val label: String
         get() {
@@ -103,9 +105,19 @@ data class DownloadLink(
         }
 }
 
-/** The site's own MSE stream endpoint. Kept for reference; not used for playback. */
+/** The site's own MSE stream endpoint. Not used for playback, only to find subtitles. */
 data class StreamOption(val streamId: String, val postId: String, val lang: String, val height: Int)
 
+/**
+ * Identifies one online stream: `/stream/{streamId}/{postId}/?lang={lang}`. Its player page
+ * lists the site's subtitle files (Farsi, English, English + Farsi), which are not embedded
+ * in the downloadable MKV but share its timing.
+ */
+data class StreamRef(val streamId: String, val postId: String, val lang: String) {
+    fun pagePath(): String = "/stream/$streamId/$postId/?lang=$lang&h=720"
+}
+
+/** A side-loaded subtitle file; `label` is the site's own name for it (e.g. "Farsi"). */
 data class SubtitleRef(val url: String, val label: String)
 
 /** A cast/crew member on a detail page. */

@@ -38,6 +38,7 @@ import com.ronald.tv.data.CastMember
 import com.ronald.tv.data.Detail
 import com.ronald.tv.data.DownloadLink
 import com.ronald.tv.data.Repo
+import com.ronald.tv.data.StreamRef
 import com.ronald.tv.data.Title
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -46,7 +47,7 @@ fun DetailScreen(
     repo: Repo,
     title: Title,
     onBack: () -> Unit,
-    onPlay: (String, String) -> Unit,
+    onPlay: (String, String, StreamRef?) -> Unit,
 ) {
     BackHandler { onBack() }
 
@@ -116,7 +117,7 @@ fun DetailScreen(
                     )
                     d.isSeries -> SeriesPicker(d, onPlay)
                     else -> QualityRow(d.downloads) { link ->
-                        onPlay(link.url, "${d.name} · ${link.label}")
+                        onPlay(link.url, "${d.name} · ${link.label}", link.stream)
                     }
                 }
 
@@ -128,7 +129,7 @@ fun DetailScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SeriesPicker(d: Detail, onPlay: (String, String) -> Unit) {
+private fun SeriesPicker(d: Detail, onPlay: (String, String, StreamRef?) -> Unit) {
     val seasons = d.seasons
     var season by remember(d.postId) { mutableStateOf(seasons.firstOrNull() ?: 1) }
     var episode by remember(d.postId) { mutableStateOf<Int?>(null) }
@@ -162,7 +163,7 @@ private fun SeriesPicker(d: Detail, onPlay: (String, String) -> Unit) {
         val tag = "S" + season.toString().padStart(2, '0') + "E" + e.toString().padStart(2, '0')
         Text(tag, style = MaterialTheme.typography.titleMedium)
         QualityRow(links) { link ->
-            onPlay(link.url, "${d.name} · $tag · ${link.label}")
+            onPlay(link.url, "${d.name} · $tag · ${link.label}", link.stream)
         }
     }
 }

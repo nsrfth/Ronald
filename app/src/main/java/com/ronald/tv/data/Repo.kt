@@ -60,6 +60,11 @@ class Repo(context: Context) {
         Scraper.parseDetail(session.get(title.url), title.postId, title.name)
     }
 
+    /** The subtitle files (Farsi, English, …) the site's own player offers for a stream. */
+    suspend fun streamSubtitles(ref: StreamRef): List<SubtitleRef> = withContext(Dispatchers.IO) {
+        Scraper.parseStreamSubtitles(session.get(ref.pagePath()))
+    }
+
     /** Cookie header so ExoPlayer's data source inherits the same session. */
     fun cookieHeader(): String = session.cookies.headerValue()
 }

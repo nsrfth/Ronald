@@ -63,6 +63,60 @@ object Scraper {
     /** /subtitle/560227/5737353/sub.srt?stream=359568 */
     private val SUBTITLE = Regex("""/subtitle/\d+/\d+/sub\.srt\?stream=\d+(?:&second=\d+)?""")
 
+    /**
+     * A series' per-episode online-player button:
+     *   <div onclick="javascript:tmpURL = '/stream/377026/5685592/?lang=original&h=2160';…">
+     *     <span …><i class='far fa-play-circle' …></i>قسمت ۰۱</span>
+     * Groups: streamId, lang, episode number (Persian or ASCII digits).
+     */
+    private val STREAM_EPISODE = Regex(
+        """/stream/(\d+)/\d+/\?lang=([^&'"]+)&h=\d+'[^>]*>.*?</i>\s*قسمت\s*([۰-۹0-9]+)"""
+    )
+
+    /**
+     * Subtitle tracks in a stream page's player config:
+     *   file: "/json/subtitle/591765/5685592/sub.srt?stream=377026",
+     *   label: 'Farsi'
+     */
+    private val STREAM_TRACK = Regex(
+        """file:\s*["'](/json/subtitle/[^"']+)["']\s*,\s*label:\s*["']([^"']*)["']"""
+    )
+
+    private fun persianDigitsToInt(s: String): Int? =
+        s.map { c -> if (c in '۰'..'۹') '0' + (c - '۰') else c }.joinToString("").toIntOrNull()
+
+    /** Subtitle files the site's own player offers for one stream. */
+    fun parseStreamSubtitles(html: String): List<SubtitleRef> =
+        STREAM_TRACK.findAll(html)
+            .map { SubtitleRef(Site.BASE + it.groupValues[1], it.groupValues[2].trim()) }
+            .distinctBy { it.url }
+            .toList()
+
+    /**
+     * Series pages carry no season on their stream buttons — only "قسمت ۰۱". Each season's
+     * stream buttons follow that season's download links, so walk the page in order and take
+     * the season from the most recent download filename.
+     */
+    private fun episodeStreams(html: String): Map<Triple<Int, Int, String>, String> {
+        data class Hit(val at: Int, val season: Int?, val stream: Triple<Int, String, String>?)
+        val hits = DLN_LINK.findAll(html).map { m ->
+            val file = m.groupValues[1].substringAfterLast('/')
+            Hit(m.range.first, EPISODE.find(file)?.groupValues?.get(1)?.toIntOrNull(), null)
+        } + STREAM_EPISODE.findAll(html).mapNotNull { m ->
+            val ep = persianDigitsToInt(m.groupValues[3]) ?: return@mapNotNull null
+            Hit(m.range.first, null, Triple(ep, m.groupValues[1], m.groupValues[2]))
+        }
+        val out = LinkedHashMap<Triple<Int, Int, String>, String>()
+        var season: Int? = null
+        for (h in hits.sortedBy { it.at }) {
+            if (h.season != null) season = h.season
+            val s = h.stream ?: continue
+            val key = Triple(season ?: continue, s.first, s.third)
+            out.putIfAbsent(key, s.second)
+        }
+        return out
+    }
+
     // ---- Listings --------------------------------------------------------
 
     fun archiveUrl(kind: Kind, page: Int): String =
@@ -444,6 +498,29 @@ object Scraper {
             StreamOption(sid, pid, lang, h.toIntOrNull() ?: 0)
         }.distinctBy { it.streamId to it.height }.toList()
 
+        // Pair every download with the online stream of the same title/episode, so the
+        // player can fetch that stream's subtitle files. Dubbed releases prefer a
+        // non-original stream, falling back to the original one.
+        val byEpisode = episodeStreams(html)
+        fun langOrder(dubbed: Boolean) = { lang: String -> (lang == "original") == dubbed }
+        val withStreams = downloads.map { d ->
+            val ref = if (d.season != null && d.episode != null) {
+                val langs = byEpisode.keys
+                    .filter { it.first == d.season && it.second == d.episode }
+                    .map { it.third }
+                    .sortedBy(langOrder(d.isDubbed))
+                langs.firstOrNull()?.let { lang ->
+                    StreamRef(byEpisode.getValue(Triple(d.season, d.episode, lang)), postId, lang)
+                }
+            } else {
+                streams.filter { it.postId == postId }
+                    .sortedBy { langOrder(d.isDubbed)(it.lang) }
+                    .firstOrNull()
+                    ?.let { StreamRef(it.streamId, postId, it.lang) }
+            }
+            d.copy(stream = ref)
+        }
+
         val subtitles = SUBTITLE.findAll(html)
             .map { it.value }
             .distinct()
@@ -506,7 +583,7 @@ object Scraper {
             .filter { it.name.isNotEmpty() }
 
         return Detail(
-            postId, name, plot, poster, downloads, streams, subtitles,
+            postId, name, plot, poster, withStreams, streams, subtitles,
             facts = facts, genres = genres, cast = cast,
         )
     }

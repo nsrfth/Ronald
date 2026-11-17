@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.ronald.tv.data.HomeData
 import com.ronald.tv.data.MenuGroup
 import com.ronald.tv.data.Repo
+import com.ronald.tv.data.StreamRef
 import com.ronald.tv.data.Title
 import kotlinx.coroutines.launch
 
@@ -24,7 +25,7 @@ sealed interface Screen {
     data object Profile : Screen
     data class Listing(val heading: String, val url: String) : Screen
     data class Detail(val title: Title) : Screen
-    data class Player(val url: String, val label: String) : Screen
+    data class Player(val url: String, val label: String, val stream: StreamRef?) : Screen
 }
 
 /**
@@ -130,7 +131,7 @@ fun AppRoot() {
             repo = repo,
             title = s.title,
             onBack = { screen = Screen.Home },
-            onPlay = { url, label -> screen = Screen.Player(url, label) },
+            onPlay = { url, label, stream -> screen = Screen.Player(url, label, stream) },
         )
 
         is Screen.Awards -> AwardsScreen(
@@ -164,6 +165,7 @@ fun AppRoot() {
             repo = repo,
             url = s.url,
             label = s.label,
+            stream = s.stream,
             onBack = { screen = Screen.Home },
         )
     }
